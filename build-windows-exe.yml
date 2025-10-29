@@ -1,0 +1,60 @@
+name: Build HDFC SME Bulk Pay (Windows)
+
+on:
+  push:
+    branches: [ main, master ]
+  workflow_dispatch:
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pyinstaller pandas openpyxl
+
+      - name: Build EXE with PyInstaller (onefile)
+        run: |
+          pyinstaller --onefile --windowed --name "HDFC_SME_Bulk_Pay" hdfc_payout_app.py \
+            --add-data "master.xlsx;." \
+            --add-data "payments.xlsx;." \
+            --add-data "logs.xlsx;." \
+            --add-data "daily_summary.xlsx;." \
+            --add-data "bulk-bene-file-upload.xlsx;." \
+            --add-data "bulk-payout-template.xlsx;." || pyinstaller --onefile --windowed --name "HDFC_SME_Bulk_Pay" hdfc_payout_app.py
+
+      - name: Collect artifact
+        run: |
+          python - <<'PY'
+import shutil, os
+from pathlib import Path
+p = Path("dist")
+out = "HDFC_SME_Bulk_Pay_windows.zip"
+exe = None
+for root,dirs,files in os.walk("dist"):
+    for f in files:
+        if f.lower().endswith(".exe") and "HDFC_SME_Bulk_Pay" in f:
+            exe = os.path.join(root,f)
+            break
+    if exe: break
+with zipfile.ZipFile(out,"w") as z:
+    if exe: z.write(exe, arcname=Path(exe).name)
+    for fname in ["master.xlsx","payments.xlsx","logs.xlsx","daily_summary.xlsx","bulk-bene-file-upload.xlsx","bulk-payout-template.xlsx"]:
+        if Path(fname).exists(): z.write(fname, arcname=Path(fname).name)
+print("Created", out)
+PY
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: HDFC_SME_Bulk_Pay-windows
+          path: HDFC_SME_Bulk_Pay_windows.zip
